@@ -1,0 +1,70 @@
+name: Unpack Invariant Fabric import
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .import/invariant.xz.b64.part00 \
+            .import/invariant.xz.b64.part01 \
+            .import/invariant.xz.b64.part02 \
+            .import/invariant.xz.b64.part03 \
+            .import/invariant.xz.b64.part04 \
+            .import/invariant.xz.b64.part05 \
+            .import/invariant.xz.b64.part06 \
+            .import/invariant.xz.b64.part07 \
+            .import/invariant.xz.b64.part08a \
+            .import/invariant.xz.b64.part08b \
+            .import/invariant.xz.b64.part08c \
+            .import/invariant.xz.b64.part09 \
+            .import/invariant.xz.b64.part10 \
+            .import/invariant.xz.b64.part11 \
+            > /tmp/invariant.xz.b64
+          base64 --decode /tmp/invariant.xz.b64 > /tmp/invariant.xz
+          xz -t /tmp/invariant.xz
+          mkdir -p /tmp/invariant-unpacked
+          tar -xJf /tmp/invariant.xz -C /tmp/invariant-unpacked
+          test -d /tmp/invariant-unpacked/invariant-fabric
+          test "$(find /tmp/invariant-unpacked/invariant-fabric -type f | wc -l)" -eq 79
+
+      - name: Replace staging with project tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a /tmp/invariant-unpacked/invariant-fabric/. .
+          rm -rf .import .init
+          rm -f .github/workflows/unpack-invariant.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          test -f README.md
+          test -f package.json
+          test -f spec/Invariant_Fabric_SRS_and_System_Architecture.md
+          sha256sum -c MANIFEST.sha256
+          test "$(find . -type f -not -path './.git/*' | wc -l)" -eq 79
+
+      - name: Commit complete project
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import complete Invariant Fabric engineering delivery"
+          git push origin HEAD:main
